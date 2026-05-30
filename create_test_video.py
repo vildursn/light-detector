@@ -3,15 +3,16 @@ import numpy as np
 
 WIDTH, HEIGHT = 1280, 720
 FPS = 15
-DURATION = 5  # seconds
-
+DURATION = 20  # seconds
 
 # (center_x, center_y, color_bgr, start_frame, end_frame, label)
+# Lights pop on briefly against a mostly dark background
 LIGHTS = [
-    (180,  360, (0,   0,   255), 10, 65, "red"),    # red,   left
-    (1050, 300, (0,   255, 0  ),  5, 75, "green"),  # green, right
-    (640,  380, (255, 255, 255),  0, 75, "white"),  # white, center
-    (420,  330, (0,   0,   255), 35, 75, "red"),    # red,   left-center (appears later)
+    (180,  360, (0,   0,   255),  30,  55, "red"),    # red,   left     — appears ~2s, gone by ~3.7s
+    (1050, 300, (0,   255, 0  ),  90, 120, "green"),  # green, right    — appears ~6s, gone by ~8s
+    (640,  380, (255, 255, 255), 165, 185, "white"),  # white, center   — appears ~11s, gone by ~12.3s
+    (820,  310, (0,   0,   255), 210, 240, "red"),    # red,   right    — appears ~14s, gone by ~16s
+    (300,  340, (0,   255, 0  ), 255, 270, "green"),  # green, left     — appears ~17s, gone by ~18s
 ]
 
 
@@ -48,10 +49,12 @@ def main() -> None:
 
     out.release()
     print(f"Created test_video.mp4  ({DURATION}s, {FPS}fps, {total_frames} frames)")
-    print("Lights:")
+    print("Lights (mostly dark — lights appear briefly):")
     for cx, cy, color, start, end, label in LIGHTS:
         bearing = (cx / WIDTH - 0.5) * 90
-        print(f"  {label:6s}  bearing={bearing:+.1f}°  frames {start}-{end}")
+        t_start = start / FPS
+        t_end = end / FPS
+        print(f"  {label:6s}  bearing={bearing:+.1f}°  {t_start:.1f}s – {t_end:.1f}s")
 
 
 if __name__ == "__main__":
