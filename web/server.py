@@ -8,7 +8,8 @@ from pathlib import Path
 import cv2
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.requests import Request
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from render import annotate
 
@@ -85,10 +86,10 @@ def _on_frame(image, detections) -> None:
         asyncio.run_coroutine_threadsafe(_manager.broadcast_text(msg), _loop)
 
 
-def run_web(source, analyzer, logger, port: int = 8000) -> None:
+def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, port: int = 8000) -> None:
     def pipeline_thread():
         from pipeline import run
-        run(source, analyzer, logger, on_frame=_on_frame)
+        run(source, proxy, logger, on_frame=_on_frame)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -103,6 +104,28 @@ def run_web(source, analyzer, logger, port: int = 8000) -> None:
     def index() -> HTMLResponse:
         html = (Path(__file__).parent / "static" / "index.html").read_text()
         return HTMLResponse(html)
+
+    @app.get("/api/status")
+    def status() -> JSONResponse:
+        from analysis.yolo_analyzer import YOLOAnalyzer
+        return JSONResponse({
+            "analyzer": "yolo" if "YOLO" in proxy.name() else "opencv",
+            "yolo_available": YOLOAnalyzer.available,
+        })
+
+    @app.post("/api/analyzer")
+    async def set_analyzer(request: Request) -> JSONResponse:
+        body = await request.json()
+        choice = body.get("type")
+        if choice == "yolo":
+            if yolo_analyzer is None:
+                return JSONResponse({"error": "YOLO not available — run: pip install ultralytics"}, status_code=400)
+            proxy.set(yolo_analyzer)
+        elif choice == "opencv":
+            proxy.set(opencv_analyzer)
+        else:
+            return JSONResponse({"error": "unknown type"}, status_code=400)
+        return JSONResponse({"analyzer": choice})
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:

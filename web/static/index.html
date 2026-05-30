@@ -15,6 +15,14 @@
   #dot { width: 9px; height: 9px; border-radius: 50%; background: #333; transition: background .4s; }
   #dot.on { background: #00e676; box-shadow: 0 0 6px #00e676; }
   header h1 { font-size: .85rem; letter-spacing: .15em; text-transform: uppercase; color: #8090b0; }
+  #analyzer-toggle { margin-left: auto; display: flex; gap: 4px; }
+  #analyzer-toggle button {
+    background: #1a1e2e; border: 1px solid #2a3050; color: #4a5a80;
+    padding: 4px 12px; border-radius: 3px; font-family: inherit; font-size: .75rem;
+    cursor: pointer; letter-spacing: .05em; transition: all .15s;
+  }
+  #analyzer-toggle button.active { background: #1e2f52; border-color: #3a6090; color: #8ab0e0; }
+  #analyzer-toggle button:disabled { opacity: .35; cursor: not-allowed; }
 
   main { flex: 1; display: flex; gap: 10px; padding: 10px; overflow: hidden; }
 
@@ -41,6 +49,10 @@
 <header>
   <div id="dot"></div>
   <h1>Light Detector</h1>
+  <div id="analyzer-toggle">
+    <button id="btn-cv" onclick="setAnalyzer('opencv')">OpenCV</button>
+    <button id="btn-yolo" onclick="setAnalyzer('yolo')">YOLO</button>
+  </div>
 </header>
 <main>
   <div id="feed-wrap">
@@ -91,6 +103,26 @@
   }
 
   connect();
+
+  // load initial state
+  fetch('/api/status').then(r => r.json()).then(s => {
+    document.getElementById('btn-yolo').disabled = !s.yolo_available;
+    updateToggle(s.analyzer);
+  });
+
+  function updateToggle(active) {
+    document.getElementById('btn-cv').classList.toggle('active', active === 'opencv');
+    document.getElementById('btn-yolo').classList.toggle('active', active === 'yolo');
+  }
+
+  async function setAnalyzer(type) {
+    const res = await fetch('/api/analyzer', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({type}),
+    });
+    if (res.ok) updateToggle(type);
+  }
 </script>
 </body>
 </html>
