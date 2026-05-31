@@ -27,12 +27,27 @@ class OpenCVAnalyzer:
         # suppress glare regions
         thresh = cv2.bitwise_and(thresh, cv2.bitwise_not(glare_mask))
 
+        # morphological opening: removes isolated noise pixels, preserves real blobs
+        if self._config.morph_open_size > 1:
+            kernel = cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE,
+                (self._config.morph_open_size, self._config.morph_open_size),
+            )
+            thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         detections = []
         for contour in contours:
             area = cv2.contourArea(contour)
             if not (self._config.min_blob_area <= area <= self._config.max_blob_area):
+                continue
+
+            perimeter = cv2.arcLength(contour, True)
+            if perimeter == 0:
+                continue
+            circularity = 4 * np.pi * area / (perimeter ** 2)
+            if circularity < self._config.min_circularity:
                 continue
 
             x, y, w, h = cv2.boundingRect(contour)

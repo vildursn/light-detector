@@ -8,6 +8,8 @@ class Config:
     brightness_threshold: int = 200  # used only when adaptive_threshold is False
     min_blob_area: int = 5
     max_blob_area: int = 5000
+    min_circularity: float = 0.3    # 0=any shape, 1=perfect circle; rejects streaks/reflections
+    morph_open_size: int = 3        # morphological opening kernel (removes isolated noise pixels)
     analyzer: str = "opencv"        # "opencv" | "yolo"
     min_confidence: float = 0.10    # detections below this are discarded
 
