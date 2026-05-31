@@ -31,5 +31,12 @@ class VideoFileAdapter:
             if spare > 0:
                 time.sleep(spare)
 
+    def current_pos(self) -> int:
+        return int(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
+
+    def seek(self, frame_num: int) -> None:
+        total = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self._cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, min(frame_num, total - 1)))
+
     def release(self) -> None:
         self._cap.release()

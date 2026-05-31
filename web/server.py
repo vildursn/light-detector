@@ -14,6 +14,11 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from render import annotate
 
 _loop: asyncio.AbstractEventLoop | None = None
+_pause_event = threading.Event()
+_pause_event.set()  # start in playing state
+_step_forward_event = threading.Event()
+_step_back_event = threading.Event()
+_is_live: bool = False
 
 
 class _ConnectionManager:
@@ -89,14 +94,21 @@ def _on_alert(light) -> None:
     asyncio.run_coroutine_threadsafe(_manager.broadcast_text(msg), _loop)
 
 
-def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None, min_confidence: float = 0.0, port: int = 8000) -> None:
+def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None, min_confidence: float = 0.0, is_live: bool = False, port: int = 8000) -> None:
+    global _is_live
+    _is_live = is_live
+    _pause_event.set()  # always start playing
+
     def pipeline_thread():
         from pipeline import run
         run(source, proxy, logger,
             on_frame=_on_frame,
             on_alert=_on_alert if tracker else None,
             tracker=tracker,
-            min_confidence=min_confidence)
+            min_confidence=min_confidence,
+            pause_event=None if is_live else _pause_event,
+            step_forward_event=None if is_live else _step_forward_event,
+            step_back_event=None if is_live else _step_back_event)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -118,7 +130,32 @@ def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None,
         return JSONResponse({
             "analyzer": "yolo" if "YOLO" in proxy.name() else "opencv",
             "yolo_available": YOLOAnalyzer.available,
+            "paused": not _pause_event.is_set(),
+            "is_live": _is_live,
         })
+
+    @app.post("/api/playback")
+    async def playback(request: Request) -> JSONResponse:
+        if _is_live:
+            return JSONResponse({"error": "cannot pause a live source"}, status_code=400)
+        body = await request.json()
+        action = body.get("action")
+        if action == "play":
+            _pause_event.set()
+        elif action == "pause":
+            _pause_event.clear()
+        elif action == "toggle":
+            if _pause_event.is_set():
+                _pause_event.clear()
+            else:
+                _pause_event.set()
+        elif action == "step_forward":
+            _pause_event.clear()  # ensure paused first
+            _step_forward_event.set()
+        elif action == "step_back":
+            _pause_event.clear()
+            _step_back_event.set()
+        return JSONResponse({"paused": not _pause_event.is_set()})
 
     @app.post("/api/analyzer")
     async def set_analyzer(request: Request) -> JSONResponse:
