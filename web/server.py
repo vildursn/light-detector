@@ -74,22 +74,29 @@ def _on_frame(image, detections) -> None:
         return
     annotated = annotate(image, detections)
     _, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
-    frame_bytes = jpeg.tobytes()
-    asyncio.run_coroutine_threadsafe(_manager.broadcast_bytes(frame_bytes), _loop)
-    for d in detections:
-        msg = json.dumps({
-            "ts": datetime.now().isoformat(timespec="seconds"),
-            "bearing": round(d.bearing, 1),
-            "color": d.color,
-            "confidence": round(d.confidence, 2),
-        })
-        asyncio.run_coroutine_threadsafe(_manager.broadcast_text(msg), _loop)
+    asyncio.run_coroutine_threadsafe(_manager.broadcast_bytes(jpeg.tobytes()), _loop)
 
 
-def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, port: int = 8000) -> None:
+def _on_alert(light) -> None:
+    if _loop is None:
+        return
+    msg = json.dumps({
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "bearing": round(light.bearing, 1),
+        "color": light.color,
+        "confidence": 1.0,
+    })
+    asyncio.run_coroutine_threadsafe(_manager.broadcast_text(msg), _loop)
+
+
+def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None, min_confidence: float = 0.0, port: int = 8000) -> None:
     def pipeline_thread():
         from pipeline import run
-        run(source, proxy, logger, on_frame=_on_frame)
+        run(source, proxy, logger,
+            on_frame=_on_frame,
+            on_alert=_on_alert if tracker else None,
+            tracker=tracker,
+            min_confidence=min_confidence)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

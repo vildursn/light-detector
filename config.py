@@ -9,6 +9,13 @@ class Config:
     min_blob_area: int = 5
     max_blob_area: int = 5000
     analyzer: str = "opencv"        # "opencv" | "yolo"
+    min_confidence: float = 0.10    # detections below this are discarded
+
+    # Light tracking / deduplication
+    track_bearing_tolerance: float = 7.0    # degrees — two detections are the same light if within this
+    confirm_after_seconds: float = 2.0      # must be seen this long before triggering an alert
+    light_gone_after_seconds: float = 5.0   # not seen for this long → considered gone
+    alert_cooldown_seconds: float = 60.0    # min time between re-alerts for the same persistent light
 
     # Adaptive thresholding
     adaptive_threshold: bool = True

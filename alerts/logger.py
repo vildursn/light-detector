@@ -27,5 +27,14 @@ class Logger:
         self._conn.commit()
         print(f"[{ts}] bearing={detection.bearing:+.1f}°  color={detection.color}  conf={detection.confidence:.2f}")
 
+    def log_event(self, light) -> None:
+        ts = datetime.now().isoformat(timespec="seconds")
+        self._conn.execute(
+            "INSERT INTO detections (timestamp, bearing, color, confidence) VALUES (?, ?, ?, ?)",
+            (ts, light.bearing, light.color, 1.0),
+        )
+        self._conn.commit()
+        print(f"[{ts}] CONFIRMED  bearing={light.bearing:+.1f}°  color={light.color}")
+
     def close(self) -> None:
         self._conn.close()

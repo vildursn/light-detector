@@ -6,6 +6,7 @@ from analysis.opencv_analyzer import OpenCVAnalyzer
 from analysis.yolo_analyzer import YOLOAnalyzer
 from analysis.proxy import AnalyzerProxy
 from alerts.logger import Logger
+from alerts.tracker import LightTracker
 from pipeline import run
 
 
@@ -35,6 +36,7 @@ def main() -> None:
     initial = yolo_analyzer if (args.analyzer == "yolo" and yolo_analyzer) else opencv_analyzer
     proxy = AnalyzerProxy(initial)
 
+    tracker = LightTracker(config)
     logger = Logger()
 
     if args.web:
@@ -42,10 +44,11 @@ def main() -> None:
         print(f"Source: {source_name}  →  http://0.0.0.0:{args.port}")
         if not YOLOAnalyzer.available:
             print("YOLO unavailable (pip install ultralytics to enable)")
-        run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, port=args.port)
+        run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger,
+                tracker=tracker, min_confidence=config.min_confidence, port=args.port)
     else:
-        print(f"Source: {source_name}  analyzer={proxy.name()}")
-        run(source, proxy, logger)
+        print(f"Source: {source_name}  analyzer={proxy.name()}  min_conf={config.min_confidence}")
+        run(source, proxy, logger, tracker=tracker, min_confidence=config.min_confidence)
         print("Done.")
 
 
