@@ -3,3 +3,7 @@ __pycache__/
 *.db
 *.mp4
 .DS_Store
+*.pem
+*.key
+*.csr
+*.srl
