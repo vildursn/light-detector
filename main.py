@@ -19,6 +19,8 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000, help="Web UI port (default 8000)")
     parser.add_argument("--no-loop", action="store_true", help="Play video file once instead of looping")
     parser.add_argument("--analyzer", choices=["opencv", "yolo"], default="opencv", help="Starting analyzer")
+    parser.add_argument("--ssl-cert", metavar="CERT", help="TLS certificate file (enables HTTPS)")
+    parser.add_argument("--ssl-key",  metavar="KEY",  help="TLS private key file")
     args = parser.parse_args()
 
     config = Config()
@@ -43,12 +45,14 @@ def main() -> None:
 
     if args.web:
         from web.server import run_web
-        print(f"Source: {source_name}  →  http://0.0.0.0:{args.port}")
+        scheme = "https" if args.ssl_cert else "http"
+        print(f"Source: {source_name}  →  {scheme}://0.0.0.0:{args.port}")
         if not YOLOAnalyzer.available:
             print("YOLO unavailable (pip install ultralytics to enable)")
         run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger,
                 tracker=tracker, min_confidence=config.min_confidence,
-                is_live=args.webcam, port=args.port, alarm=alarm)
+                is_live=args.webcam, port=args.port, alarm=alarm,
+                ssl_certfile=args.ssl_cert, ssl_keyfile=args.ssl_key)
     else:
         print(f"Source: {source_name}  analyzer={proxy.name()}  min_conf={config.min_confidence}")
         run(source, proxy, logger, tracker=tracker, min_confidence=config.min_confidence, on_alert=alarm.alert)
