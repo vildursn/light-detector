@@ -95,7 +95,7 @@ def _on_alert(light) -> None:
     asyncio.run_coroutine_threadsafe(_manager.broadcast_text(msg), _loop)
 
 
-def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None, min_confidence: float = 0.0, is_live: bool = False, port: int = 8000, alarm=None) -> None:
+def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None, min_confidence: float = 0.0, is_live: bool = False, port: int = 8000, alarm=None, ssl_certfile: str = None, ssl_keyfile: str = None) -> None:
     global _is_live
     _is_live = is_live
     _pause_event.set()  # always start playing
@@ -221,4 +221,5 @@ def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None,
             "alerts": confirmed_alerts,
         })
 
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning",
+                ssl_certfile=ssl_certfile, ssl_keyfile=ssl_keyfile)
