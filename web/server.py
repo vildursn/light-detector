@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 import cv2
+import numpy as np
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.requests import Request
@@ -184,5 +185,40 @@ def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None,
                 await ws.receive_text()
         except WebSocketDisconnect:
             await _manager.disconnect(ws)
+
+    @app.post("/api/analyze")
+    async def analyze_frame(request: Request) -> JSONResponse:
+        body = await request.body()
+        arr = np.frombuffer(body, np.uint8)
+        image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if image is None:
+            return JSONResponse({"error": "invalid image"}, status_code=400)
+
+        detections = proxy.analyze(image)
+        if min_confidence > 0:
+            detections = [d for d in detections if d.confidence >= min_confidence]
+
+        confirmed_alerts = []
+        if tracker is not None:
+            confirmed = tracker.update(detections)
+            for light in confirmed:
+                logger.log_event(light)
+                if alarm is not None:
+                    alarm.alert(light)
+                ts = datetime.now().isoformat(timespec="seconds")
+                confirmed_alerts.append({"ts": ts, "bearing": round(light.bearing, 1), "color": light.color})
+
+        return JSONResponse({
+            "detections": [
+                {
+                    "bearing": round(d.bearing, 1),
+                    "color": d.color,
+                    "confidence": round(d.confidence, 2),
+                    "bbox": {"x": d.bbox[0], "y": d.bbox[1], "w": d.bbox[2], "h": d.bbox[3]},
+                }
+                for d in detections
+            ],
+            "alerts": confirmed_alerts,
+        })
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")

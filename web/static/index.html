@@ -15,7 +15,7 @@
   #dot { width: 9px; height: 9px; border-radius: 50%; background: #333; transition: background .4s; }
   #dot.on { background: #00e676; box-shadow: 0 0 6px #00e676; }
   header h1 { font-size: .85rem; letter-spacing: .15em; text-transform: uppercase; color: #8090b0; }
-  #controls { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  #controls { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
   #btn-back, #btn-forward,
   #btn-playpause {
     background: #1a1e2e; border: 1px solid #2a3050; color: #8ab0e0;
@@ -34,6 +34,12 @@
   }
   #analyzer-toggle button.active { background: #1e2f52; border-color: #3a6090; color: #8ab0e0; }
   #analyzer-toggle button:disabled { opacity: .35; cursor: not-allowed; }
+  #btn-camera {
+    background: #1a1e2e; border: 1px solid #2a3050; color: #4a5a80;
+    padding: 4px 12px; border-radius: 3px; font-family: inherit; font-size: .75rem;
+    cursor: pointer; letter-spacing: .05em; transition: all .15s;
+  }
+  #btn-camera.active { background: #1e2f52; border-color: #3a6090; color: #8ab0e0; }
 
   main { flex: 1; display: flex; gap: 10px; padding: 10px; overflow: hidden; }
 
@@ -68,6 +74,7 @@
     <button id="btn-cv" onclick="setAnalyzer('opencv')">OpenCV</button>
     <button id="btn-yolo" onclick="setAnalyzer('yolo')">YOLO</button>
   </div>
+  <button id="btn-camera" onclick="toggleCamera()" title="Use phone/webcam camera">Camera</button>
   </div>
 </header>
 <main>
@@ -81,39 +88,43 @@
   </div>
 </main>
 <script>
-  const dot    = document.getElementById('dot');
-  const feed   = document.getElementById('feed');
-  const noFeed = document.getElementById('no-feed');
-  const log    = document.getElementById('log');
-  let prevUrl  = null;
+  const dot     = document.getElementById('dot');
+  const log     = document.getElementById('log');
+  const feedWrap = document.getElementById('feed-wrap');
+  let prevUrl   = null;
+
+  function addLogRow(ts, color, bearing, confidence) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const sign = bearing >= 0 ? '+' : '';
+    row.innerHTML =
+      `<span class="ts">${ts.slice(11)}</span>` +
+      `<span class="col col-${color}">${color}</span>` +
+      `<span class="brg">${sign}${bearing}°</span>` +
+      `<span class="conf">${Math.round(confidence * 100)}%</span>`;
+    log.prepend(row);
+    while (log.children.length > 300) log.lastChild.remove();
+  }
 
   function connect() {
     const ws = new WebSocket(`ws://${location.host}/ws`);
     ws.binaryType = 'blob';
 
-    ws.onopen  = () => dot.classList.add('on');
+    ws.onopen  = () => { if (!cameraActive) dot.classList.add('on'); };
     ws.onclose = () => { dot.classList.remove('on'); setTimeout(connect, 2000); };
 
     ws.onmessage = ({ data }) => {
       if (typeof data === 'string') {
         const d = JSON.parse(data);
-        const row = document.createElement('div');
-        row.className = 'row';
-        const sign = d.bearing >= 0 ? '+' : '';
-        row.innerHTML =
-          `<span class="ts">${d.ts.slice(11)}</span>` +
-          `<span class="col col-${d.color}">${d.color}</span>` +
-          `<span class="brg">${sign}${d.bearing}°</span>` +
-          `<span class="conf">${Math.round(d.confidence * 100)}%</span>`;
-        log.prepend(row);
-        while (log.children.length > 300) log.lastChild.remove();
-      } else {
+        addLogRow(d.ts, d.color, d.bearing, d.confidence);
+      } else if (!cameraActive) {
         const url = URL.createObjectURL(data);
         if (prevUrl) URL.revokeObjectURL(prevUrl);
         prevUrl = url;
-        feed.src = url;
-        feed.style.display = 'block';
-        noFeed.style.display = 'none';
+        const feedEl = document.getElementById('feed');
+        const noFeedEl = document.getElementById('no-feed');
+        if (feedEl) { feedEl.src = url; feedEl.style.display = 'block'; }
+        if (noFeedEl) noFeedEl.style.display = 'none';
       }
     };
   }
@@ -123,9 +134,9 @@
   const btnPP      = document.getElementById('btn-playpause');
   const btnBack    = document.getElementById('btn-back');
   const btnForward = document.getElementById('btn-forward');
+  const btnCamera  = document.getElementById('btn-camera');
   let isLive = false;
 
-  // load initial state
   fetch('/api/status').then(r => r.json()).then(s => {
     document.getElementById('btn-yolo').disabled = !s.yolo_available;
     updateToggle(s.analyzer);
@@ -173,6 +184,111 @@
       body: JSON.stringify({type}),
     });
     if (res.ok) updateToggle(type);
+  }
+
+  // ── Phone / webcam camera mode ────────────────────────────────────────────
+
+  const COLOR_MAP = { red: '#ff4455', green: '#22ee77', white: '#c8ccdd', unknown: '#8090b0' };
+
+  let cameraActive  = false;
+  let cameraRunning = false;
+  let videoStream   = null;
+  const videoEl   = document.createElement('video');
+  videoEl.autoplay  = true;
+  videoEl.playsInline = true;
+  videoEl.muted     = true;
+  const offscreen = document.createElement('canvas');
+  const offCtx    = offscreen.getContext('2d');
+
+  async function startCamera() {
+    if (cameraActive) return;
+    try {
+      videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    } catch {
+      alert('Camera access denied or unavailable.\n\niOS requires HTTPS — connect via https:// or use Android/desktop.');
+      return;
+    }
+
+    if (!isLive) {
+      await fetch('/api/playback', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'pause'}),
+      }).then(r => r.json()).then(s => setPaused(s.paused));
+    }
+
+    videoEl.srcObject = videoStream;
+    await videoEl.play();
+
+    feedWrap.innerHTML = '';
+    const camCanvas = document.createElement('canvas');
+    camCanvas.style.cssText = 'max-width:100%;max-height:100%;';
+    feedWrap.appendChild(camCanvas);
+    const camCtx = camCanvas.getContext('2d');
+
+    cameraActive  = true;
+    cameraRunning = true;
+    dot.classList.add('on');
+    btnCamera.textContent = 'Stop';
+    btnCamera.classList.add('active');
+
+    async function captureLoop() {
+      if (!cameraRunning) return;
+      if (!videoEl.videoWidth) { setTimeout(captureLoop, 50); return; }
+
+      offscreen.width  = videoEl.videoWidth;
+      offscreen.height = videoEl.videoHeight;
+      offCtx.drawImage(videoEl, 0, 0);
+
+      offscreen.toBlob(async blob => {
+        let data = { detections: [], alerts: [] };
+        try {
+          const res = await fetch('/api/analyze', { method: 'POST', body: blob });
+          if (res.ok) data = await res.json();
+        } catch (_) {}
+
+        if (!cameraRunning) return;
+
+        camCanvas.width  = offscreen.width;
+        camCanvas.height = offscreen.height;
+        camCtx.drawImage(offscreen, 0, 0);
+
+        for (const det of data.detections) {
+          const c = COLOR_MAP[det.color] || COLOR_MAP.unknown;
+          const { x, y, w, h } = det.bbox;
+          camCtx.strokeStyle = c;
+          camCtx.lineWidth = 2;
+          camCtx.strokeRect(x, y, w, h);
+          camCtx.fillStyle = c;
+          camCtx.font = '11px monospace';
+          const sign = det.bearing >= 0 ? '+' : '';
+          camCtx.fillText(`${det.color} ${sign}${det.bearing}°`, x + 2, y > 14 ? y - 4 : y + h + 12);
+        }
+
+        for (const alert of data.alerts) {
+          addLogRow(alert.ts, alert.color, alert.bearing, 1.0);
+        }
+
+        if (cameraRunning) setTimeout(captureLoop, 100);
+      }, 'image/jpeg', 0.8);
+    }
+
+    captureLoop();
+  }
+
+  function stopCamera() {
+    cameraRunning = false;
+    cameraActive  = false;
+    if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+    feedWrap.innerHTML = '<img id="feed" alt="" style="display:none"><span id="no-feed">Waiting for feed…</span>';
+    btnCamera.textContent = 'Camera';
+    btnCamera.classList.remove('active');
+    dot.classList.remove('on');
+  }
+
+  function toggleCamera() {
+    if (cameraActive) stopCamera();
+    else startCamera();
   }
 </script>
 </body>
