@@ -7,6 +7,7 @@ from analysis.yolo_analyzer import YOLOAnalyzer
 from analysis.proxy import AnalyzerProxy
 from alerts.logger import Logger
 from alerts.tracker import LightTracker
+from alerts.audio_alarm import AudioAlarm
 from pipeline import run
 
 
@@ -38,6 +39,7 @@ def main() -> None:
 
     tracker = LightTracker(config)
     logger = Logger()
+    alarm = AudioAlarm()
 
     if args.web:
         from web.server import run_web
@@ -46,10 +48,10 @@ def main() -> None:
             print("YOLO unavailable (pip install ultralytics to enable)")
         run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger,
                 tracker=tracker, min_confidence=config.min_confidence,
-                is_live=args.webcam, port=args.port)
+                is_live=args.webcam, port=args.port, alarm=alarm)
     else:
         print(f"Source: {source_name}  analyzer={proxy.name()}  min_conf={config.min_confidence}")
-        run(source, proxy, logger, tracker=tracker, min_confidence=config.min_confidence)
+        run(source, proxy, logger, tracker=tracker, min_confidence=config.min_confidence, on_alert=alarm.alert)
         print("Done.")
 
 

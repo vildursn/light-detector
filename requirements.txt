@@ -2,3 +2,4 @@ opencv-python>=4.8
 numpy>=1.24
 fastapi>=0.111
 uvicorn[standard]>=0.29
+sounddevice>=0.4

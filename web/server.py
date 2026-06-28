@@ -94,16 +94,21 @@ def _on_alert(light) -> None:
     asyncio.run_coroutine_threadsafe(_manager.broadcast_text(msg), _loop)
 
 
-def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None, min_confidence: float = 0.0, is_live: bool = False, port: int = 8000) -> None:
+def run_web(source, proxy, opencv_analyzer, yolo_analyzer, logger, tracker=None, min_confidence: float = 0.0, is_live: bool = False, port: int = 8000, alarm=None) -> None:
     global _is_live
     _is_live = is_live
     _pause_event.set()  # always start playing
+
+    def _on_alert_combined(light):
+        _on_alert(light)
+        if alarm is not None:
+            alarm.alert(light)
 
     def pipeline_thread():
         from pipeline import run
         run(source, proxy, logger,
             on_frame=_on_frame,
-            on_alert=_on_alert if tracker else None,
+            on_alert=_on_alert_combined if tracker else None,
             tracker=tracker,
             min_confidence=min_confidence,
             pause_event=None if is_live else _pause_event,
