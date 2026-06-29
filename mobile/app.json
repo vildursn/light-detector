@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Light Detector",
+    "slug": "light-detector",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "lightdetector",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vildursn.lightdetector",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used to detect navigation lights from other vessels.",
+        "NSMicrophoneUsageDescription": "Microphone access is required by the camera framework."
+      }
+    },
+    "android": {
+      "package": "com.vildursn.lightdetector",
+      "permissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-av",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Camera is used to detect navigation lights from other vessels."
+        }
+      ]
+    ]
+  }
+}
